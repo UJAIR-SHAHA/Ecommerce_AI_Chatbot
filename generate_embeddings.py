@@ -1,60 +1,39 @@
-import json
+import pandas as pd
 import numpy as np
 import faiss
-import pandas as pd
+import pickle
 from sentence_transformers import SentenceTransformer
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain_community.vectorstores import FAISS
 
 # Load product data
-product_data = pd.read_csv("model/final_fashion_data_v2.csv")
+product_data = pd.read_csv("model/final_fashion_data_v2.csv")  # Replace with your file path
 
-# Check required columns
-if 'product_id' not in product_data.columns or 'tags' not in product_data.columns:
-    raise ValueError("CSV must contain 'product_id' and 'tags' columns!")
+def combine_columns(row):
+    # Combine all columns into one string
+    return " ".join([f"{col}: {str(row[col])}" for col in product_data.columns])
 
-# Initialize embedding model
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# Create a combined text column
+product_data['combined_text'] = product_data.apply(combine_columns, axis=1)
 
-# Generate embeddings for tags
-descriptions = product_data['tags'].astype(str).tolist()
-embeddings = model.encode(descriptions, convert_to_numpy=True, normalize_embeddings=True).astype("float32")
+# Extract the combined text for embedding
+combined_texts = product_data['combined_text'].tolist()
 
-# Get embedding dimension
+# Initialize the embedding model
+model = SentenceTransformer('sentence-transformers/all-MiniLM-l6-v2')
+embeddings = model.encode(combined_texts)
+embeddings = np.array(embeddings).astype('float32')
+embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+
 dimension = embeddings.shape[1]
 
-# Create FAISS index (Inner Product for cosine similarity)
 index = faiss.IndexFlatIP(dimension)
-
-# Normalize embeddings for better similarity search
-faiss.normalize_L2(embeddings)
-
-# Add embeddings to FAISS index
 index.add(embeddings)
 
-# Ensure index size matches the dataset
-assert index.ntotal == len(product_data), "FAISS index size mismatch!"
+# Save FAISS index to a file
+faiss.write_index(index, "faiss_index.idx")
 
-# Create document store for storing product metadata
-docstore = InMemoryDocstore()
-docstore.docs = {
-    str(i): {"product_id": str(pid), "tags": tags}
-    for i, (pid, tags) in enumerate(zip(product_data["product_id"], descriptions))
-}
+# Create docstore for relevant data
+docstore = {str(i): {"product_id": str(product_data['product_id'][i]), "description": combined_texts[i]} for i in range(len(product_data))}
 
-# Define an embedding function for LangChain FAISS
-def embedding_function(texts):
-    return model.encode(texts, convert_to_numpy=True, normalize_embeddings=True).astype("float32")
-
-# Create FAISS vector store
-vector_store = FAISS(
-    embedding_function=embedding_function,
-    index=index,
-    docstore=docstore,
-    index_to_docstore_id={i: str(i) for i in range(len(product_data))}
-)
-
-# Save FAISS index
-vector_store.save_local("faiss_index")
-
-print(f"✅ FAISS index created with {index.ntotal} entries and saved successfully!")
+# Save docstore to a file
+with open("docstore.pkl", "wb") as f:
+    pickle.dump(docstore, f)
