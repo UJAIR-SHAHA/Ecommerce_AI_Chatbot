@@ -14,7 +14,7 @@ This project is a Flask-based eCommerce assistant powered by Hugging Face's AI m
 
 - **Backend**: Flask (Python)
 - **Frontend**: HTML, CSS, JavaScript
-- **AI Model**: Hugging Face (DeepSeek-R1-Distill-Qwen-32B or another selected model)
+- **AI Model**: Hugging Face (DeepSeek-R1-Distill-Qwen-32B)
 - **Retrieval-Augmented Generation (RAG)**: Uses FAISS to retrieve relevant information before generating a response.
 - **Embedding & Search**: Sentence Transformers, FAISS (Facebook AI Similarity Search)
 - **Vector Store**: FAISS to store and index embedded product descriptions for fast retrieval.
